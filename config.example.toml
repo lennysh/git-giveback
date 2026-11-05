@@ -1,0 +1,25 @@
+# git-giveback configuration
+# Copy to ~/.config/git-giveback/config.toml (or pass --config PATH).
+#
+# Each [[github]] / [[gitlab]] block is one account to query. Tokens are looked
+# up in this order: `token` (avoid storing secrets in files), `token_env`, the
+# standard environment variables, then the `gh` / `glab` CLI login.
+
+[[github]]
+host = "github.com"
+# username = "someone-else"   # default: the token's owner
+# token_env = "GITHUB_TOKEN"
+
+# GitHub Enterprise Server
+# [[github]]
+# host = "github.example.com"
+# token_env = "GHE_TOKEN"
+
+[[gitlab]]
+url = "https://gitlab.com"
+# token_env = "GITLAB_TOKEN"
+
+# Self-managed GitLab
+# [[gitlab]]
+# url = "https://gitlab.example.com"
+# token_env = "GITLAB_EXAMPLE_TOKEN"

@@ -1,0 +1,14 @@
+#!/usr/bin/env python3
+"""Run git-giveback straight from a clone, without installing it."""
+
+import os
+import sys
+
+if sys.version_info < (3, 11):
+    sys.exit("git-giveback requires Python 3.11 or newer")
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "src"))
+
+from git_giveback.cli import main  # noqa: E402
+
+sys.exit(main())

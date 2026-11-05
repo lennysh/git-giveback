@@ -1,0 +1,30 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "git-giveback"
+dynamic = ["version"]
+description = "List your GitHub and GitLab contributions (PRs/MRs, reviews, issues, commits) for a date range."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+authors = [{ name = "Lenny Shirley" }]
+dependencies = []
+classifiers = [
+    "Environment :: Console",
+    "Programming Language :: Python :: 3",
+    "Topic :: Software Development :: Version Control :: Git",
+]
+
+[project.urls]
+Homepage = "https://github.com/lennysh/git-giveback"
+
+[project.scripts]
+git-giveback = "git_giveback.cli:main"
+
+[tool.hatch.version]
+path = "src/git_giveback/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/git_giveback"]
