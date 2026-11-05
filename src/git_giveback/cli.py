@@ -13,6 +13,8 @@ from .dates import display_tz, format_range, resolve_range
 from .http import HttpError
 from .models import KINDS, AccountResult, ProviderError
 from .output import FORMATS, Report, render
+from .points import PointsError, default_points, load_points
+from .scopes import Scope, ScopeError, load_scopes, scope_for
 from .providers.github import GitHubProvider
 from .providers.gitlab import GitLabProvider
 
@@ -22,6 +24,8 @@ examples:
   git-giveback --days 90 --format markdown -o q3-giveback.md
   git-giveback --github --gitlab https://gitlab.example.com --since 2026-03-01
   git-giveback --exclude '^my-user/' --type pull_request --type review
+  git-giveback --scopes https://example.com/scopes.toml -f csv -o my-giveback.csv
+  git-giveback --points https://example.com/points.toml --days 365
 
 Tokens are read from GH_TOKEN/GITHUB_TOKEN (or `gh auth token`) and
 GITLAB_TOKEN (or `glab`). See README.md for the config file format.
@@ -54,9 +58,16 @@ def build_parser() -> argparse.ArgumentParser:
     filters.add_argument("-i", "--include", action="append", metavar="REGEX", help="only repos matching REGEX")
     filters.add_argument("-x", "--exclude", action="append", metavar="REGEX", help="skip repos matching REGEX")
     filters.add_argument("-t", "--type", action="append", choices=KINDS, help="only these contribution types")
+    filters.add_argument("--scopes", metavar="PATH|URL",
+                         help="TOML allowlist of repositories (e.g. a giveback dashboard's scopes.toml); "
+                              "anything outside it is dropped before output")
 
     out = parser.add_argument_group("output")
     out.add_argument("-f", "--format", choices=FORMATS, default="table")
+    points = out.add_mutually_exclusive_group()
+    points.add_argument("--points", metavar="PATH|URL",
+                        help="scoring rules in points.toml format (default: built-in Giveback Ninja rules)")
+    points.add_argument("--no-points", action="store_true", help="leave out the Points section")
     out.add_argument("-o", "--output", metavar="FILE", help="write the report to FILE")
     out.add_argument("-v", "--verbose", action="store_true", help="log API requests to stderr")
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -83,7 +94,7 @@ def select_accounts(args) -> list[Account]:
     return accounts
 
 
-def apply_filters(result: AccountResult, include, exclude, types) -> None:
+def apply_filters(result: AccountResult, include, exclude, types, scopes: list[Scope] | None = None) -> None:
     inc = [re.compile(p) for p in include or []]
     exc = [re.compile(p) for p in exclude or []]
     result.contributions = [
@@ -91,6 +102,7 @@ def apply_filters(result: AccountResult, include, exclude, types) -> None:
         if (not types or c.kind in types)
         and (not inc or any(p.search(c.repo) for p in inc))
         and not any(p.search(c.repo) for p in exc)
+        and (scopes is None or scope_for(scopes, result.host, c.repo, c.kind) is not None)
     ]
 
 
@@ -103,7 +115,9 @@ def main(argv: list[str] | None = None, provider_factory: Callable = make_provid
         for pattern in (args.include or []) + (args.exclude or []):
             re.compile(pattern)
         accounts = select_accounts(args)
-    except (argparse.ArgumentTypeError, re.error, ProviderError) as err:
+        scopes = load_scopes(args.scopes) if args.scopes else None
+        points = None if args.no_points else (load_points(args.points) if args.points else default_points())
+    except (argparse.ArgumentTypeError, re.error, ProviderError, ScopeError, PointsError) as err:
         parser.error(str(err))
     if not accounts:
         parser.error("no accounts to query: set GITHUB_TOKEN / GITLAB_TOKEN, log in with `gh auth login`, "
@@ -119,10 +133,10 @@ def main(argv: list[str] | None = None, provider_factory: Callable = make_provid
             result = provider.collect(since, until)
         except (HttpError, ProviderError) as err:
             result = AccountResult(account.provider, label, account.username or "?", errors=[str(err)])
-        apply_filters(result, args.include, args.exclude, args.type)
+        apply_filters(result, args.include, args.exclude, args.type, scopes)
         results.append(result)
 
-    text = render(Report(since, until, tz, results), args.format)
+    text = render(Report(since, until, tz, results, points, scopes), args.format)
     if args.output:
         with open(args.output, "w", encoding="utf-8", newline="") as handle:
             handle.write(text)

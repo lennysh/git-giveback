@@ -155,7 +155,8 @@ class GitHubProvider:
         return self._graphql(VIEWER_QUERY)["viewer"]["login"]
 
     def _commits(self, login: str, since: datetime, until: datetime) -> list[Contribution]:
-        per_repo: dict[str, Contribution] = {}
+        """One Contribution per repository per day (GitHub buckets commit contributions by day)."""
+        per_day: dict[tuple[str, datetime], Contribution] = {}
         hidden = 0
         for start, end in chunks(since, until, COMMIT_WINDOW_DAYS):
             data = self._graphql(COMMITS_QUERY, {
@@ -165,22 +166,22 @@ class GitHubProvider:
             hidden += collection.get("restrictedContributionsCount") or 0
             for entry in collection["commitContributionsByRepository"]:
                 repo = entry["repository"]
-                nodes = entry["contributions"]["nodes"]
-                count = sum(n["commitCount"] for n in nodes)
-                latest = max((parse_api_datetime(n["occurredAt"]) for n in nodes), default=None)
-                item = per_repo.setdefault(repo["nameWithOwner"], Contribution(
-                    kind="commits", repo=repo["nameWithOwner"], title="", ref=repo["nameWithOwner"],
-                    url=f"{repo['url']}/commits?author={login}", date=None, role="authored", count=0,
-                ))
-                item.count += count
-                if latest and (item.date is None or latest > item.date):
-                    item.date = latest
+                name = repo["nameWithOwner"]
+                for node in entry["contributions"]["nodes"]:
+                    day = parse_api_datetime(node["occurredAt"])
+                    if not node["commitCount"] or day is None:
+                        continue
+                    item = per_day.setdefault((name, day), Contribution(
+                        kind="commits", repo=name, title="", ref=name,
+                        url=f"{repo['url']}/commits?author={login}", date=day, role="authored", count=0,
+                    ))
+                    item.count += node["commitCount"]
         if hidden:
             self._result.add_note(
                 f"{hidden} contributions are in private repositories this token cannot see "
                 "(check token scopes and SAML SSO authorization)"
             )
-        return [c for c in per_repo.values() if c.count]
+        return list(per_day.values())
 
     def _reviews(self, login: str, since: datetime, until: datetime) -> list[Contribution]:
         per_pr: dict[str, Contribution] = {}

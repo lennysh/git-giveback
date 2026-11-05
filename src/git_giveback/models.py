@@ -24,6 +24,8 @@ class Contribution:
     role: str = ""  # authored / assignee / reviewer
     ref: str = ""  # "owner/repo#12" or "group/project!12"
     count: int = 1  # number of commits (commits) or review submissions (review)
+    # Commits are reported as one row per repository per day, so overlapping
+    # reports can be de-duplicated. Table/markdown output rolls them up per repo.
 
     def to_dict(self) -> dict:
         data = asdict(self)

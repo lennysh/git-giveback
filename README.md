@@ -67,25 +67,61 @@ podman run --rm -e GITHUB_TOKEN git-giveback --since 2026-01-01
 | **Issues** | Issues you opened in the range, and issues assigned to you that were closed in the range | Same |
 | **Commits** | Commits per repository, as counted by your GitHub contribution graph | Commits you *pushed*, per project, from your activity events |
 
+### Points
+
+Each report ends with a **Points** section, and the total also appears in the
+summary line:
+
+```
+  Points (30)
+    Merged pull requests       17 × 1 = 17
+    Pull requests reviewed     13 × 1 = 13
+    Issues closed as assignee   0 × 1 = 0
+```
+
+The built-in rules match the original Giveback Ninja program: 1 point per
+merged PR, per PR reviewed, and per issue closed while assigned to you (issues
+you opened yourself don't count). Commits are listed but not scored.
+
+* **`--points PATH|URL`** loads your own rules from a TOML file, in the same
+  format as
+  [git-giveback-dashboard's `points.toml`](https://github.com/lennysh/git-giveback-dashboard/blob/main/points.toml).
+  Rules can match on type, state, role and scope (scope rules need
+  `--scopes`). They can score commits per commit, and can be limited to a
+  season with `since` / `until`.
+* **`--no-points`** leaves the section out.
+
+These points are estimates based on what you can see. A dashboard re-verifies
+every contribution against GitHub before scoring it. To preview a dashboard's
+score, pass both its `--scopes` and `--points` URLs.
+
 ## Usage
 
 ```
 git-giveback [--since DATE | --days N] [--until DATE] [--utc]
              [--github [HOST]] [--gitlab [URL]] [--user NAME] [--config PATH]
-             [--include REGEX] [--exclude REGEX] [--type TYPE]
+             [--include REGEX] [--exclude REGEX] [--type TYPE] [--scopes PATH|URL]
              [--format table|markdown|json|csv] [--output FILE] [--verbose]
+             [--points PATH|URL | --no-points]
 ```
 
 * **Dates** can be `YYYY-MM-DD` or a full ISO 8601 datetime. A plain `--until`
   date includes that whole day. Times use your local time zone unless you pass
   `--utc`. With no dates, the last 30 days are reported.
 * **`--format markdown`** produces a linked list you can paste into a review
-  doc. `json` and `csv` are for spreadsheets and scripts.
+  doc. `json` and `csv` are for spreadsheets and scripts. They hold the raw
+  rows, with commits as one row per repository per day.
 * **`--include` / `--exclude`** filter on the repository's full name, e.g.
   `--include '^redhat-cop/'` or `--exclude '^lennysh/'` to skip personal repos.
   Both can be repeated.
 * **`--type`** limits the output to `pull_request`, `review`, `issue` or
   `commits`. It can be repeated.
+* **`--scopes`** takes a TOML allowlist of repositories, as a file path or an
+  `https://` URL, and drops everything outside it *before* any output is
+  written. This is how you produce a submission for a giveback dashboard
+  (such as [git-giveback-dashboard](https://github.com/lennysh/git-giveback-dashboard))
+  without sharing private or unrelated work. The format is documented in
+  `src/git_giveback/scopes.py`.
 * **`--user`** reports on someone else. Only activity your token can see is
   included, which usually means public activity.
 
@@ -97,6 +133,11 @@ git-giveback --since 2026-03-01 --until 2027-02-28 -f markdown -o fy27-giveback.
 
 # Only upstream / community work, no personal repos
 git-giveback --days 180 --exclude '^lennysh/'
+
+# A dashboard submission: only the dashboard's repos, as CSV
+git-giveback --since 2026-03-01 \
+  --scopes https://raw.githubusercontent.com/lennysh/git-giveback-dashboard/main/scopes.toml \
+  -f csv -o 2026-q3.csv
 
 # GitHub plus a self-managed GitLab
 git-giveback --github --gitlab https://gitlab.example.com --since 2026-01-01
@@ -168,6 +209,8 @@ The code lives in `src/git_giveback/`:
 | `providers/gitlab.py` | GitLab REST v4: MRs, issues, user events |
 | `output.py` | table / markdown / json / csv renderers |
 | `config.py` | Config file and token discovery |
+| `scopes.py` | Repository allowlists for `--scopes` |
+| `points.py` | Scoring rules for the Points section |
 | `http.py` | Small urllib client with rate-limit retries |
 
 Adding a forge (Gitea/Forgejo, Bitbucket, ...) means writing a provider with a

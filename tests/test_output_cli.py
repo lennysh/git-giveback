@@ -19,7 +19,9 @@ def sample_account():
         Contribution("pull_request", "o/r", "Fix [bug] *now*", "https://x/1", when, "merged", "authored", "o/r#1"),
         Contribution("pull_request", "o/r", "WIP", "https://x/2", when, "open", "authored", "o/r#2"),
         Contribution("review", "o/s", "Their PR", "https://x/3", when, "approved", "reviewer", "o/s#3"),
-        Contribution("commits", "o/r", "", "https://x/c", when, "", "authored", "o/r", count=12),
+        Contribution("commits", "o/r", "", "https://x/c", when, "", "authored", "o/r", count=10),
+        Contribution("commits", "o/r", "", "https://x/c", datetime(2026, 1, 2, tzinfo=UTC), "", "authored",
+                     "o/r", count=2),
     ], notes=["a note"])
 
 
@@ -29,13 +31,14 @@ class OutputTest(unittest.TestCase):
 
     def test_summary(self):
         self.assertEqual(summary(sample_account()),
-                         "2 pull requests (1 merged, 1 open) · 1 reviewed · 12 commits in 1 repos")
+                         "2 pull requests (1 merged, 1 open) · 1 reviewed · 12 commits in 1 repo")
 
     def test_table(self):
         text = render(self.report(), "table")
         self.assertIn("2026-01-01 to 2026-01-31 (UTC)", text)
         self.assertIn("2026-01-05  merged  o/r#1  Fix [bug] *now*", text)
-        self.assertIn("12 commits", text)
+        self.assertIn("12 commits", text)  # per-day rows rolled up per repo
+        self.assertNotIn("10 commits", text)
         self.assertIn("note: a note", text)
 
     def test_markdown_escapes_titles(self):
@@ -45,10 +48,10 @@ class OutputTest(unittest.TestCase):
 
     def test_json_and_csv(self):
         data = json.loads(render(self.report(), "json"))
-        self.assertEqual(len(data["accounts"][0]["contributions"]), 4)
+        self.assertEqual(len(data["accounts"][0]["contributions"]), 5)  # raw per-day commit rows
         rows = list(csv.DictReader(io.StringIO(render(self.report(), "csv"))))
         self.assertEqual(rows[0]["ref"], "o/r#1")
-        self.assertEqual(rows[-1]["count"], "12")
+        self.assertEqual([r["count"] for r in rows if r["kind"] == "commits"], ["10", "2"])
 
 
 class FakeProvider:
@@ -74,3 +77,18 @@ class CliTest(unittest.TestCase):
         with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as ctx:
             cli.main(["--github", "--include", "("])
         self.assertEqual(ctx.exception.code, 2)
+
+
+class ScopesCliTest(unittest.TestCase):
+    def test_scopes_file_filters_rows(self):
+        import tempfile, os
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "scopes.toml")
+            with open(path, "w") as handle:
+                handle.write('[[scope]]\nname = "S"\nhost = "github.com"\nowner = "o"\nrepos = "s"\n')
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+                cli.main(["--github", "-f", "json", "--scopes", path],
+                         provider_factory=lambda account, token, verbose: FakeProvider())
+        refs = [c["ref"] for c in json.loads(out.getvalue())["accounts"][0]["contributions"]]
+        self.assertEqual(refs, ["o/s#3"])

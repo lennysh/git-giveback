@@ -120,8 +120,8 @@ class GitHubProviderTest(unittest.TestCase):
             errors=[{"message": "Resource protected by organization SAML enforcement."}],
         )
         result = self.collect(handler, username="me")
-        commits = [c for c in result.contributions if c.kind == "commits"]
-        self.assertEqual((commits[0].count, commits[0].date), (5, datetime(2026, 1, 5, 8, tzinfo=UTC)))
+        commits = sorted((c.date, c.count) for c in result.contributions if c.kind == "commits")
+        self.assertEqual(commits, [(datetime(2026, 1, 2, 8, tzinfo=UTC), 3), (datetime(2026, 1, 5, 8, tzinfo=UTC), 2)])
         self.assertTrue(any("SAML" in n for n in result.notes))
         self.assertTrue(any("2 contributions" in n for n in result.notes))
         self.assertEqual(result.errors, [])

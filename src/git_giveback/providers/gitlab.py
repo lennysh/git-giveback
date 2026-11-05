@@ -2,7 +2,7 @@
 
 * Merge requests and issues come from the global ``/merge_requests`` and
   ``/issues`` endpoints, filtered client-side by created/merged/closed time.
-* Pushed commits and reviews (approvals, merges and comments on other people's
+* Pushed commits (one row per project per UTC day) and reviews (approvals, merges and comments on other people's
   MRs) come from the user's activity events. GitLab keeps events for about
   three years, so older ranges will be incomplete.
 """
@@ -138,7 +138,7 @@ class GitLabProvider:
         before = (until.astimezone(timezone.utc).date() + timedelta(days=1)).isoformat()
         events = self._paginate(f"/users/{user['id']}/events", {"after": after, "before": before})
 
-        pushes: dict[int, Contribution] = {}
+        pushes: dict[tuple[int, str], Contribution] = {}  # (project, UTC day)
         reviews: dict[str, Contribution] = {}
         for event in events:
             when = parse_api_datetime(event.get("created_at"))
@@ -152,17 +152,17 @@ class GitLabProvider:
                 commits = push.get("commit_count") or 0
                 if push.get("ref_type") == "tag" or commits <= 0:
                     continue
-                item = pushes.get(project_id)
+                day = when.astimezone(timezone.utc).date().isoformat()
+                item = pushes.get((project_id, day))
                 if item is None:
                     project = self._project(project_id)
                     repo = project["path_with_namespace"]
-                    item = pushes[project_id] = Contribution(
+                    item = pushes[(project_id, day)] = Contribution(
                         kind="commits", repo=repo, title="", ref=repo,
                         url=f"{project['web_url']}/-/commits?author={quote(user['username'])}",
-                        date=when, role="pushed", count=0,
+                        date=datetime.fromisoformat(day).replace(tzinfo=timezone.utc), role="pushed", count=0,
                     )
                 item.count += commits
-                item.date = max(item.date, when)
                 continue
 
             if action == "approved" and event.get("target_type") == "MergeRequest":

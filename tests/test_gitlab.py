@@ -76,7 +76,8 @@ class GitLabProviderTest(unittest.TestCase):
         self.assertEqual(sorted((c.ref, c.state) for c in by_kind["pull_request"]),
                          [("grp/proj!1", "merged"), ("grp/proj!2", "draft")])
         self.assertEqual([(c.ref, c.role) for c in by_kind["issue"]], [("grp/proj#5", "authored, assignee")])
-        self.assertEqual([(c.repo, c.count) for c in by_kind["commits"]], [("grp/proj", 5)])
+        self.assertEqual(sorted((c.repo, c.date.day, c.count) for c in by_kind["commits"]),
+                         [("grp/proj", 3, 3), ("grp/proj", 4, 2)])
         reviews = {c.ref: c for c in by_kind["review"]}
         self.assertEqual(set(reviews), {"grp/proj!40", "project-2!3"})  # own MR !1 excluded
         self.assertEqual((reviews["grp/proj!40"].state, reviews["grp/proj!40"].count), ("approved", 2))
